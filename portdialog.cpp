@@ -76,6 +76,7 @@ void portDialog::search_set_port(int Sp)
 	}
 	my_serial.close();
 
+    PX_data = NULL;
 	if(portname.left(3) == "COM")
 	{
         qDebug() << "port found";
@@ -113,8 +114,12 @@ void portDialog::initial_data( bool c, quint16 d,bool e)	//初始数据
 	ui->radioButton_CW->setChecked(true);					//顺时针
 	ui->lineEdit_PR->setText("0");							//移动距离
 	ui->lineEdit_PA->setText("0");							//绝对距离
-    ui->lineEdit_PX->setText(QString::number(PX_data));     //当前位置
-	ui->checkBox_motor_connected->setChecked(Set_MotorConnect);	//连接电机
+    ui->checkBox_motor_connected->setChecked(Set_MotorConnect);	//连接电机
+
+    if(portname.left(3) == "COM")
+        ui->lineEdit_PX->setText(QString::number(PX_data)); //当前位置
+    else
+        ui->lineEdit_PX->setText(NULL);
 
     ui->pushButton_setPXis0->setEnabled(false);
     if(portname.left(3) != "COM")
