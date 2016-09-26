@@ -21,6 +21,9 @@ portDialog::portDialog(QWidget *parent) :
     connect(&thread_port,SIGNAL(timeout(bool)),this,SLOT(portError_OR_timeout(bool)));
     connect(&thread_port,SIGNAL(last_return()),this,SLOT(port_Close()));
 	handle_PX = false;
+    portDia_status = false;
+    click_OC_motor = false;
+    over_set_PX = false;
 }
 
 portDialog::~portDialog()
@@ -36,7 +39,6 @@ bool portDialog::get_returnMotor_connect()					//返回连接电机bool值给主
 
 void portDialog::search_set_port(int Sp)
 {
-	portDia_status = false;
 	retSP = Sp;												//对话框接收SP值
 	ui->pushButton_auto_searchPort->setEnabled(false);
 
@@ -81,6 +83,7 @@ void portDialog::search_set_port(int Sp)
 	{
         qDebug() << "port found";
         ui->pushButton_open_motor->setEnabled(true);
+        portDia_status =true;
 		OpenMotor();										//打开电机
 	}
 	else
@@ -100,12 +103,16 @@ void portDialog::close_order()
     thread_port.transaction(portname,Order_str);
 }
 
-void portDialog::initial_data( bool c, quint16 d,bool e)	//初始数据
+void portDialog::initial_data(quint16 a, bool c, quint16 d,bool e)	//初始数据
 {
+    if(retSP != a)
+    {
+        retSP = a;
+        SetSP(retSP);
+    }
 	Set_MotorConnect = c;									//连接电机的bool值
 	StepAngle = d;											//步进角
 	Not_collect = e;										//正在采集的bool值
-	portDia_status = false;
 
 	ui->lineEdit_serialportName->setText(portname);			//串口名
 	ui->lineEdit_SP->setText(QString::number(retSP));		//速度
@@ -133,6 +140,7 @@ void portDialog::initial_data( bool c, quint16 d,bool e)	//初始数据
         ui->pushButton_open_motor->setEnabled(true);
     }
 
+    qDebug() << "status_value initial() = " << status_value;
     if(status_value == 3)
         ui->pushButton_open_motor->setText(QString::fromLocal8Bit("关闭电机"));
     else
@@ -167,6 +175,7 @@ void portDialog::on_pushButton_open_motor_clicked()
 {
     portDia_status = true;
     handle_PX = false;
+    click_OC_motor = true;
     OpenMotor();
 }
 
@@ -243,11 +252,17 @@ void portDialog::on_pushButton_setPXis0_clicked()			//设置当前位置为0键
 	ui->pushButton_sure->setEnabled(false);
 	ui->pushButton_cancel->setEnabled(false);
 	portDia_status = true;
-	SetPX(ui->lineEdit_PX->text().toInt());
+    //SetPX(ui->lineEdit_PX->text().toInt());
 }
 
 void portDialog::show_PX(float px_show)
 {
+    if(click_OC_motor)
+    {
+        portDia_status = false;
+        click_OC_motor = false;
+    }
+
     ui->lineEdit_PX->setText(QString::number(px_show,'f',2));
 }
 
@@ -269,6 +284,7 @@ void portDialog::ABS_Rotate(int Pa)
     qDebug() << "ABS  PX_data = " << PX_data;
     qDebug() << "ABS  pa      = " << Pa;
     PX_data = Pa;
+    qDebug() << "PX_data ABS = " << PX_data;
     Order_str = "PA="+QString::number(Pa*MOTOR_RESOLUTION/360)+";";
     order_value = true;
 	thread_port.transaction(portname,Order_str);
@@ -292,10 +308,18 @@ void portDialog::CCW_Rotate(int Pr)
 	thread_port.transaction(portname,Order_str);
 }
 
-void portDialog::SetPX(int Px)
+void portDialog::SetPX_1(int Px)
 {
-	Order_str = "MO=0;PX="+QString::number(Px*MOTOR_RESOLUTION/360)+";MO=1;";
+    over_set_PX = true;
+    px_mainwindow = Px;
+    Order_str = "MO=0;";
 	thread_port.transaction(portname,Order_str);
+}
+
+void portDialog::SetPX_2()
+{
+    Order_str = "PX="+QString::number(px_mainwindow*MOTOR_RESOLUTION/360)+";";
+    thread_port.transaction(portname,Order_str);
 }
 
 void portDialog::SetSP(int Sp)
@@ -345,6 +369,8 @@ void portDialog::Send_BG()
 {
     qDebug() << "send BG;";
     Order_str = "BG;";
+    rotate_judge = true;
+    even_num = PX_data;
     thread_port.transaction(portname,Order_str);
 }
 
@@ -369,6 +395,10 @@ void portDialog::DemandPX()
 	{
 		handle_PX = true;
         Order_str = "PX;";
+        if(rotate_judge)
+            rotate_judge = false;
+        else
+            rotate_judge = true;
 		thread_port.transaction(portname,Order_str);
 	}
 }
@@ -380,18 +410,32 @@ void portDialog::receive_response(const QString &s)
     qDebug() << "res = " << res;
     if(res.left(3) == "MO=")
     {
-        check_MOvalue();                                    //检查电机打开状态
-//        if(res.left(4) == "MO=1")                         //MO=1,打开电机
-//            check_MOvalue();
-        if((res.left(4) == "MO=0")&&portDia_status)         //MO=0,设置当前位置后，更新对话框中的按钮
-            update_status();
+        if(portDia_status == false)
+        {
+            if(res.left(4) == "MO=0")
+                SetPX_2();
+            else
+                if(res.left(4) == "MO=1")
+                    check_MOvalue();
+        }
+        else
+        {
+            check_MOvalue();                                    //检查电机打开状态
+    //        if(res.left(4) == "MO=1")                         //MO=1,打开电机
+    //            check_MOvalue();
+            if((res.left(4) == "MO=0")&&portDia_status)         //MO=0,设置当前位置后，更新对话框中的按钮
+                update_status();
+        }
+
     }
     else
         if(res.left(3) == "MO;")
         {
+            portDia_status = false;
             if(res.left(4) == "MO;0")                       //电机打开失败
             {
                 status_value = 2;
+                portDia_status = false;
                 ui->pushButton_open_motor->setText(QString::fromLocal8Bit("打开电机"));
                 ui->pushButton_absolute->setEnabled(false);
                 ui->pushButton_relative->setEnabled(false);
@@ -407,17 +451,17 @@ void portDialog::receive_response(const QString &s)
                     ui->pushButton_relative->setEnabled(true);
                     ui->pushButton_auto_searchPort->setEnabled(false);
                     emit this->Motor_connect_status(status_value);          //主界面状态栏显示电机连接状态
-                    SetSP(retSP);                           //设置速度
+                    SetAC();                                //设置加速度
                 }
         }
         else
-            if(res.left(3) == "SP=")
-                SetAC();                                    //设置加速度
+            if(res.left(3) == "AC=")
+                SetDC();                                //设置减速度
             else
-                if(res.left(3) == "AC=")
-                    SetDC();                                //设置减速度
+                if(res.left(3) == "DC=")
+                    SetSP(retSP);                       //设置速度
                 else
-                    if(res.left(3) == "DC=")
+                    if(res.left(3) == "SP=")
                         Find_PX();
                     else
                         if((res.left(3) == "PA=")||(res.left(3) == "PR="))
@@ -434,27 +478,51 @@ void portDialog::receive_response(const QString &s)
 
                                     float PX_float = PxStr.toFloat()*360/MOTOR_RESOLUTION;
                                     qDebug() << "PX_float = " << PX_float;
-                                    emit this->SendPX(PX_float);//主界面左侧圆盘显示电机位置
-
-                                    if(portDia_status)
-                                        show_PX(PX_float);      //串口对话框显示电机位置数值
 
                                     int PX_int = PX_float + 0.5;
+                                    qDebug() << "over_set_PX = " << over_set_PX;
 
                                     if(initial_PX)
                                     {
-                                        PX_data = PX_int;
-                                        initial_PX = false;
+                                        if(over_set_PX)
+                                        {
+                                            if((-1<(PX_float - px_mainwindow))&&((PX_float - px_mainwindow)<1))
+                                            {
+                                                PX_data = px_mainwindow;
+                                                if(portDia_status)
+                                                    show_PX(PX_float);
+                                                qDebug() << "xxxx";
+                                            }
+                                            else
+                                                return;
+                                            qDebug() << "yyyy";
+                                            status_value = 2;
+                                            OpenMotor();
+                                            over_set_PX = false;
+                                        }
+                                        else
+                                        {
+                                            PX_data = PX_int;
+                                            initial_PX = false;
+                                        }
                                     }
                                     else
                                     {
-                                        qDebug() << "PX_data  = " << PX_data;
-                                        if(((PX_data-1)<=PX_int)&&(PX_int<=(PX_data+1)))
+                                        if(rotate_judge)
+                                            even_num = PX_float;  //2n次的PX值
+                                        else
+                                            odd_num = PX_float;   //2n+1次的PX值
+
+                                        if((-1<(even_num - odd_num))&&((even_num - odd_num)<1))
                                         {
-                                            timer1->stop();      //若到达预定位置，关闭定时器，并发送MS
+                                            timer1->stop();    //电机停止转动时关闭定时器，并发送MS
                                             Send_MS();
                                         }
                                     }
+
+                                    emit this->SendPX(PX_float);//主界面左侧圆盘显示电机位置
+                                    if(portDia_status)
+                                        show_PX(PX_float);      //串口对话框显示电机位置度数
 
                                     handle_PX = false;
 
@@ -466,11 +534,22 @@ void portDialog::receive_response(const QString &s)
                                         QString BGStr = list.at(1).toLocal8Bit().data();
                                         if(BGStr == "0")        //电机停止转动
                                         {
+                                            qDebug() << "PX_data = " << PX_data;
+                                            qDebug() << "odd_num = " << odd_num;
                                             if(portDia_status)
                                                 update_status();//更新串口对话框界面
-                                            emit this->Position_success();
+                                            else
+                                                if((-1<(PX_data-odd_num))&&((PX_data-odd_num)<1))
+                                                    emit this->Position_success();
+                                                else
+                                                    emit this->Position_Error();
                                         }
+                                        else
+                                            timer1->start(60);
                                     }
+                                    else
+                                        if(res.left(3) == "PX=")
+                                            Find_PX();
 }
 
 void portDialog::portError_OR_timeout(bool a)				//串口未能打开或连接超时

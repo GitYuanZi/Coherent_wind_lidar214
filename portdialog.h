@@ -19,7 +19,7 @@ public:
 	explicit portDialog(QWidget *parent = 0);
 	~portDialog();
 
-	void initial_data(bool c,quint16 d,bool e);//默认的设置参数
+    void initial_data(quint16 a,bool c,quint16 d,bool e);//默认的设置参数
 	void search_set_port(int Sp);
 	bool get_returnMotor_connect();			//返回连接电机的bool值给主程序
     void show_PX(float px_show);			//显示当前位置
@@ -29,15 +29,16 @@ public:
 	void ABS_Rotate(int Pa);				//绝对转动
 	void CW_Rotate(int Pr);					//相对正转
 	void CCW_Rotate(int Pr);				//相对反转
-	void SetPX(int Px);						//设置当前位置PX
+    void SetPX_1(int Px);					//设置当前位置PX，发送MO=0;
+    void SetPX_2();                         //设置当前位置px，发送PX=n;
 	void SetSP(int Sp);						//设置电机速度SP
-    void SetAC();
-    void SetDC();
+    void SetAC();                           //设置电机加速度
+    void SetDC();                           //设置电机减速度
 	void OpenMotor();						//打开电机
-    void check_MOvalue();
-    void Send_BG();
-    void Send_MS();
-    void Find_PX();
+    void check_MOvalue();                   //发送MO;查询电机是否成功商店
+    void Send_BG();                         //发送BG;电机转动到预定位置
+    void Send_MS();                         //发送MS;查询电机当前状态
+    void Find_PX();                         //发送PX;查询电机当前位置
 
 signals:
     void portdlg_send(const QString &re);           //对话框返回字符串到主程序
@@ -49,6 +50,7 @@ signals:
 
 
 private slots:
+    void on_pushButton_open_motor_clicked();
 	void on_pushButton_default_clicked();	//默认键
 	void on_pushButton_sure_clicked();		//确定键
 	void on_pushButton_cancel_clicked();	//取消键
@@ -61,9 +63,7 @@ private slots:
 	void receive_response(const QString &s);
     void portError_OR_timeout(bool a);		//串口未连接或接收命令超时
     void port_Close();                      //串口关闭
-	void DemandPX();						//查询PX
-
-    void on_pushButton_open_motor_clicked();
+    void DemandPX();						//查询PX
 
 private:
 	Ui::portDialog *ui;
@@ -83,6 +83,13 @@ private:
 	QTimer *timer1;				//定时器，用于定时检查当前位置
 	bool portDia_status;		//串口对话框打开状态
 	bool handle_PX;				//正在处理PX值
+
+    bool rotate_judge;          //两次位置判断
+    float  odd_num;             //2n+1次的PX值
+    float  even_num;            //2n次的PX值
+    int px_mainwindow;          //主程序采集完成后的位置
+    bool click_OC_motor;        //点击了打开或关闭电机按钮
+    bool over_set_PX;           //采集结束后调整当前位置px
 };
 
 #endif // PORTDIALOG_H

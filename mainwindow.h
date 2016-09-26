@@ -94,6 +94,7 @@ private:
     bool need_instruct;							//本次采集记录说明
     bool locus_error;							//电机位置错误
     bool PortMotorClose;                        //电机串口关闭
+    int MotorStatus_value;                      //电机状态值
 
 	//USB采集卡
 	void *adq_cu;

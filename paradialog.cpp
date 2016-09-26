@@ -403,7 +403,7 @@ void paraDialog::set_motorSP()														//电机转速
 	if(ui->lineEdit_SP->text().toInt() > 90)
 	{
 		QMessageBox::warning(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("最高转速不能超过每秒90度"));
-		ui->lineEdit_SP->setText(NULL);
+        ui->lineEdit_SP->setText("90");
 	}
 	else
 	{

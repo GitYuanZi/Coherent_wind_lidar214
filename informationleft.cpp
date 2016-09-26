@@ -22,6 +22,7 @@ informationleft::~informationleft()
 
 void informationleft::set_currentAngle(float a)		//当前角度、圆盘示意图
 {
+    QCoreApplication::processEvents();
     while(a>360)
         a = a - 360;
     QString str = QString::number(a,'f',2) + QString::fromLocal8Bit("°");

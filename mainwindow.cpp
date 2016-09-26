@@ -64,7 +64,7 @@ MainWindow::MainWindow(QWidget *parent) :
 	success_configure = true;
 	stopped = true;														//初始状态，未进行数据采集
 	num_running = 0;													//运行的数据存储线程数为0
-	need_instruct = true;
+    need_instruct = false;
     PortMotorClose = false;
 
 	connect(&threadA, SIGNAL(store_finish()),this,SLOT(receive_storefinish()));
@@ -271,7 +271,7 @@ void MainWindow::on_action_set_triggered()
 	if (ParaSetDlg->exec() == QDialog::Accepted)					// 确定键功能
 	{
 		mysetting =	ParaSetDlg->get_settings();						//mysetting获取修改后的参数
-		dockleft_dlg->set_currentAngle(mysetting.start_azAngle);	//更新左侧栏
+        //dockleft_dlg->set_currentAngle(mysetting.start_azAngle);	//更新左侧栏
 		dockleft_dlg->set_groupNum(mysetting.angleNum);
 		dockleft_dlg->set_groupcnt(0);
 		if(mysetting.isSingleCh)
@@ -317,7 +317,7 @@ void MainWindow::on_action_collect_instruct_triggered(bool checked)
 //打开电机的串口控制对话框
 void MainWindow::on_action_serialport_triggered()
 {
-	PortDialog->initial_data(using_motor,mysetting.step_azAngle,stopped);
+    PortDialog->initial_data(mysetting.SP,using_motor,mysetting.step_azAngle,stopped);
 	if(PortDialog->exec() == QDialog::Accepted)		//从串口对话框接收连接电机bool值
 		using_motor = PortDialog->get_returnMotor_connect();
 }
@@ -366,97 +366,110 @@ void MainWindow::on_action_start_triggered()
 		return;
 	}
 
-	n_sample_skip = 1;					//采样间隔设为1，表示无采样间隔
-	if(ADQ214_SetSampleSkip(adq_cu,1,n_sample_skip) == 0)
-	{
-		hintInfo_handle(3);
-		return;
-	}
+    qDebug() << "MotorStatus_value = " << MotorStatus_value;
+    switch (MotorStatus_value) {
+    case 1:
+        hintInfo_handle(12);
+        break;
+    case 2:
+        hintInfo_handle(13);
+        break;
+    case 3:
+        n_sample_skip = 1;					//采样间隔设为1，表示无采样间隔
+        if(ADQ214_SetSampleSkip(adq_cu,1,n_sample_skip) == 0)
+        {
+            hintInfo_handle(3);
+            return;
+        }
 
-	n_sample_skip = 0;
-	if(ADQ214_SetSampleDecimation(adq_cu,1,n_sample_skip) == 0)
-	{
-		hintInfo_handle(3);
-		return;
-	}
+        n_sample_skip = 0;
+        if(ADQ214_SetSampleDecimation(adq_cu,1,n_sample_skip) == 0)
+        {
+            hintInfo_handle(3);
+            return;
+        }
 
-	success_configure = adq_para_set();	//设置采集卡参数
-	if(success_configure == true)		//采集卡配置成功
-	{
-		//增加采集记录和说明
-		QString text;
-		text.clear();
-		if(need_instruct)
-		{
-			bool ok;
-			text = QInputDialog::getText(this,QString::fromLocal8Bit("采集说明"),
-												 QString::fromLocal8Bit("请输入记录文字"),
-												 QLineEdit::Normal,QString::fromLocal8Bit(NULL),&ok);
-	//			if(ok&&(!text.isEmpty()))
-	//				qDebug() << "OK";
-		}
-		m_setfile.updatelogFile(text);
+        success_configure = adq_para_set();	//设置采集卡参数
+        if(success_configure == true)		//采集卡配置成功
+        {
+            //增加采集记录和说明
+            QString text;
+            text.clear();
+            if(need_instruct)
+            {
+                bool ok;
+                text = QInputDialog::getText(this,QString::fromLocal8Bit("采集说明"),
+                                                     QString::fromLocal8Bit("请输入记录文字"),
+                                                     QLineEdit::Normal,QString::fromLocal8Bit(NULL),&ok);
+        //			if(ok&&(!text.isEmpty()))
+        //				qDebug() << "OK";
+            }
+            m_setfile.updatelogFile(text);
 
-		direction_intervalNum = mysetting.direct_intervalTime * FREQUENCY_OF_JUDGE;
-		dI_timer_counter = direction_intervalNum;		//为了第一次
+            direction_intervalNum = mysetting.direct_intervalTime * FREQUENCY_OF_JUDGE;
+            dI_timer_counter = direction_intervalNum;		//为了第一次
 
-		Create_DataFolder();			//创建数据存储文件夹
-		num_collect = 0;
-		locus_error = false;
-		stopped = false;				//stopped设置为false
-		notrig_signal = false;
-		thread_enough = true;
-		if((mysetting.step_azAngle == 0)&&(using_motor == false))	//径向不连电机采集
-		{
-			isPosition_reached = true;
-			timer_judge->start(PERIOD_OF_JUDGE);
-		}
-		else														//连接电机采集（径向OR扫描）
-		{
-			if(mysetting.step_azAngle != 0)
-			{
-				circle_intervalNum = mysetting.time_circle_interval*FREQUENCY_OF_JUDGE_PERMIN;
-				cI_timer_counter = circle_intervalNum;
-//				cI_timer_counter = 0;
-				Num_perRound = 360/mysetting.step_azAngle;
-			}
-			isPosition_reached = false;								//初始值为false
-			collect_state->setText(QString::fromLocal8Bit("电机位置调整..."));
-			timer_judge->start(PERIOD_OF_JUDGE);
-			PortDialog->ABS_Rotate(mysetting.start_azAngle);
-		}
-	}
-	else											//采集卡配置失败
-		hintInfo_handle(4);
+            Create_DataFolder();			//创建数据存储文件夹
+            num_collect = 0;
+            locus_error = false;
+            stopped = false;				//stopped设置为false
+            notrig_signal = false;
+            thread_enough = true;
+            if((mysetting.step_azAngle == 0)&&(using_motor == false))	//径向不连电机采集
+            {
+                isPosition_reached = true;
+                timer_judge->start(PERIOD_OF_JUDGE);
+            }
+            else														//连接电机采集（径向OR扫描）
+            {
+                if(mysetting.step_azAngle != 0)
+                {
+                    circle_intervalNum = mysetting.time_circle_interval*FREQUENCY_OF_JUDGE_PERMIN;
+                    cI_timer_counter = circle_intervalNum;
+    //				cI_timer_counter = 0;
+                    Num_perRound = 360/mysetting.step_azAngle;
+                }
+                isPosition_reached = false;								//初始值为false
+                collect_state->setText(QString::fromLocal8Bit("电机位置调整..."));
+                timer_judge->start(PERIOD_OF_JUDGE);
+                PortDialog->ABS_Rotate(mysetting.start_azAngle);
+            }
+        }
+        else											//采集卡配置失败
+            hintInfo_handle(4);
+        break;
+    default:
+        break;
+    }
 }
 
 //采集停止的提示信息和处理
 void MainWindow::hintInfo_handle(int controlNum)
 {
-	if(controlNum >4)
-	{
-		timer_judge->stop();
-		onecollect_over = true;
-		collect_reset();
-		collect_state->setText(QString::fromLocal8Bit("采集结束"));
-	}
-	switch (controlNum) {
-	case 1:
-		QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("数据存储尚未完成"));
-		break;
-	case 2:
-		QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("采集组数为0"));
-		break;
-	case 3:
-		QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("采集卡连接异常，请重新连接"));
-		break;
-	case 4:
-		ADQ214_DisarmTrigger(adq_cu,1);
-		ADQ214_MultiRecordClose(adq_cu,1);
-		QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("采集卡设置失败"));
-		break;
-	case 5:
-		QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("采集已停止"));
+    if(controlNum >4)
+    {
+        timer_judge->stop();
+        onecollect_over = true;
+        collect_reset();
+        collect_state->setText(QString::fromLocal8Bit("采集结束"));
+    }
+    switch (controlNum) {
+    case 1:
+        QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("数据存储尚未完成"));
+        break;
+    case 2:
+        QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("采集组数为0"));
+        break;
+    case 3:
+        QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("采集卡连接异常，请重新连接"));
+        break;
+    case 4:
+        ADQ214_DisarmTrigger(adq_cu,1);
+        ADQ214_MultiRecordClose(adq_cu,1);
+        QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("采集卡设置失败"));
+        break;
+    case 5:
+        QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("采集已停止"));
 		break;
 	case 6:
 		timer_trigger_waiting->stop();
@@ -477,6 +490,12 @@ void MainWindow::hintInfo_handle(int controlNum)
 	case 11:
 		QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("电机位置错误，请重新采集"));
 		break;
+    case 12:
+        QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("串口未连接，请检查串口连接状态"));
+        break;
+    case 13:
+        QMessageBox::information(this,QString::fromLocal8Bit("提示"),QString::fromLocal8Bit("电机未打开，请检查电机打开状态"));
+        break;
 	default:
 		break;
 	}
@@ -584,6 +603,7 @@ void MainWindow::judge_collect_condition()
 //更新角度、Dial显示
 void MainWindow::Motor_Position(float a)
 {
+    QCoreApplication::processEvents();
 	PX_lastData = a;
 	dockleft_dlg->set_currentAngle(a);
 }
@@ -591,7 +611,8 @@ void MainWindow::Motor_Position(float a)
 //更新状态栏中电机连接状态
 void MainWindow::Motor_status(int a)
 {
-    switch (a) {
+    MotorStatus_value = a;
+    switch (MotorStatus_value) {
     case 1:
         motor_state->setText(QString::fromLocal8Bit("串口未打开"));
         break;
@@ -909,10 +930,10 @@ void MainWindow::update_collect_number()
 void MainWindow::collect_reset()
 {
 	qDebug() << "main 9collect_reset";
-	if((PX_lastData >= 360)&&(mysetting.step_azAngle != 0))
+    if(((PX_lastData>360)||(PX_lastData==360))&&(mysetting.step_azAngle != 0))
 	{
 		PX_lastData = PX_lastData%360;
-		PortDialog->SetPX(PX_lastData);
+        PortDialog->SetPX_1(PX_lastData);
 	}
 	stopped = true;
 	ADQ214_DisarmTrigger(adq_cu,1);
